@@ -1,0 +1,529 @@
+create or replace PACKAGE BODY PKG_INCONSISTENCIAS_PRUEBA AS
+
+iv_Transito Varchar2(255 Byte);
+GS_RADICADO Simple_Integer:=0;
+
+Procedure Sp_Registrar_Transito As
+
+/*ISVA
+Nombre     :Sp_Registrar_Transito
+Autor      :Blados.Ospina
+Fecha      :07/05/18
+Parametros :iv_Transito
+Retorno    :          
+Proyecto   :PKG_INCONSISTENCIAS_TRANSITOS
+VersiÛn    :1.0
+Objetivo   :Recupera el nombre del transito
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor           Version  Modificacion   
+07/05/2018  Blados.Ospina   1.0                     */
+
+Begin
+iv_Transito:='';
+
+    Select Distinct Fm.Municipio Into iv_Transito From St_Maestro Sm
+    Inner Join Bd_Fiscalizacion.Fc_Municipio_Departamento Fm On Fm.Divipo = Sm.Id_Secretaria
+    Where Id_Radicado = GS_RADICADO;
+
+Exception 
+    When Others Then 
+    iv_Transito:='';    
+    
+End Sp_Registrar_Transito;
+
+Procedure SP_Inconsistencia_Vehiculos As
+
+/*ISVA
+Nombre     :SP_Inconsistencia_Vehiculos
+Autor      :Blados.Ospina
+Fecha      :07/05/18
+Parametros :lv_Archivo, lb_Existe, lutl_archivo, lcur_vehiculos
+Retorno    :          
+Proyecto   :PKG_INCONSISTENCIAS_TRANSITOS
+VersiÛn    :1.0
+Objetivo   :Genera las inconsistencias por transito 
+           :para los vehiculos   
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor           Version  Modificacion   
+07/05/2018  Blados.Ospina   1.0                     */
+
+lv_Archivo Varchar2(255 byte):=GS_RADICADO||' '||iv_Transito||' CORRECCION VEHICULOS ' ||To_Char(Sysdate,'dd-mm-yyyy hh24-mi-ss')||'.txt';
+lb_Existe Boolean:=False;
+
+lutl_archivo UTL_FILE.FILE_TYPE;
+        
+        Cursor lcur_vehiculos Is 
+            -- VALIDO LONGITUD DE NRO_PLACA
+        SELECT  iv_Transito ,'Longitud NRO_PLACA mayor a la permitida(6)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NRO_PLACA) > 6 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_MARCA
+        SELECT   iv_Transito ,'Longitud ID_MARCA mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (REPLACE (ST_V.ID_MARCA,'.','')) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_MARCA
+        SELECT   iv_Transito ,'Longitud NOMBRE_MARCA mayor a la permitida(40)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_MARCA) > 40 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_LINEA
+        SELECT   iv_Transito ,'Longitud ID_LINEA mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (REPLACE (ST_V.ID_LINEA,'.','')) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_LINEA
+        SELECT   iv_Transito ,'Longitud NOMBRE_LINEA mayor a la permitida(40)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_LINEA) > 40 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE MODELO
+        SELECT   iv_Transito ,'Longitud MODELO mayor a la permitida(4)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (REPLACE (ST_V.MODELO,'.','')) > 4 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_CLASE
+        SELECT   iv_Transito ,'Longitud ID_CLASE mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_CLASE) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        
+        
+        union 
+        
+        -- VALIDO LONGITUD DE ID_LINEA
+        SELECT   iv_Transito ,'Longitud ID_LINEA mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_LINEA) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_CLASE
+        SELECT   iv_Transito ,'Longitud NOMBRE_CLASE mayor a la permitida(40)' as INCONSISTENCIA,'VEHICULOS' as ARCHIVO, ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_CLASE) > 40 and ST_V.id_radicado =GS_RADICADO
+        
+        
+        
+        union 
+        
+        -- VALIDO LONGITUD DE ID_SERVICIO
+        SELECT   iv_Transito ,'Longitud ID_SERVICIO mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_SERVICIO) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union 
+        
+        -- VALIDO LONGITUD DE NOMBRE_SERVICIO
+        SELECT   iv_Transito ,'Longitud NOMBRE_SERVICIO mayor a la permitida(40)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_SERVICIO) > 40 and ST_V.id_radicado =GS_RADICADO
+        
+        union 
+        
+        -- VALIDO LONGITUD DE ID_CARROCERIA
+        SELECT   iv_Transito ,'Longitud ID_CARROCERIA mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_CARROCERIA) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_CARROCERIA
+        SELECT   iv_Transito ,'Longitud NOMBRE_CARROCERIA mayor a la permitida(40)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_CARROCERIA) > 40 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_COMBUSTIBLE
+        SELECT   iv_Transito ,'Longitud ID_COMBUSTIBLE mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_COMBUSTIBLE) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_BATERIA
+        SELECT   iv_Transito ,'Longitud ID_BATERIA mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_BATERIA) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_BATERIA
+        SELECT   iv_Transito ,'Longitud NOMBRE_BATERIA mayor a la permitida(10)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_BATERIA) > 10 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE POTENCIA
+        SELECT   iv_Transito ,'Longitud POTENCIA mayor a la permitida(10)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.POTENCIA) > 10 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_SECRETARIA
+        SELECT   iv_Transito ,'Longitud ID_SECRETARIA mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_SECRETARIA) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_SECRETARIA
+        SELECT   iv_Transito ,'Longitud NOMBRE_SECRETARIA mayor a la permitida(80)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_SECRETARIA) > 80 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE CILINDRAJE
+        SELECT   iv_Transito ,'Longitud CILINDRAJE mayor a la permitida(10)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.CILINDRAJE) > 10 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE CAP_PASAJEROS
+        SELECT   iv_Transito ,'Longitud CAP_PASAJEROS mayor a la permitida(3)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.CAP_PASAJEROS) > 3 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE CAP_TONELADAS
+        SELECT   iv_Transito ,'Longitud CAP_TONELADAS mayor a la permitida(6)' as INCONSISTENCIA,'VEHICULOS' as ARCHIVO, ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.CAP_TONELADAS) > 6 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE VALOR_FACTURA
+        SELECT   iv_Transito ,'Longitud VALOR_FACTURA mayor a la permitida(10)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.VALOR_FACTURA) > 10 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE BLINDADO
+        SELECT   iv_Transito ,'Longitud BLINDADO mayor a la permitida(1)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.BLINDADO) > 1 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE IMPORTADO_NACIONAL
+        SELECT   iv_Transito ,'Longitud IMPORTADO_NACIONAL mayor a la permitida(2)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.IMPORTADO_NACIONAL) > 2 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE ID_ESTADO
+        SELECT   iv_Transito ,'Longitud ID_ESTADO mayor a la permitida(4)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.ID_ESTADO) > 4 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NOMBRE_ESTADO
+        SELECT   iv_Transito ,'Longitud NOMBRE_ESTADO mayor a la permitida(40)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NOMBRE_ESTADO) > 40 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE CLASICO_ANTIGUO
+        SELECT   iv_Transito ,'Longitud CLASICO_ANTIGUO mayor a la permitida(1)' as INCONSISTENCIA,'VEHICULOS' as ARCHIVO, ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.CLASICO_ANTIGUO) > 1 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE NRO_PUERTAS
+        SELECT   iv_Transito ,'Longitud NRO_PUERTAS mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.NRO_PUERTAS) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE FECHA_MATRICULO
+        SELECT   iv_Transito ,'Longitud FECHA_MATRICULO mayor a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.FECHA_MATRICULO) > 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        -- VALIDO LONGITUD DE FECHA_MATRICULO
+        SELECT   iv_Transito ,'Longitud FECHA_MATRICULO menos a la permitida(8)' as INCONSISTENCIA, 'VEHICULOS' as ARCHIVO,ST_V.*, st_v.rowid
+        FROM TMP_VEHICULOS ST_V
+        where length (ST_V.FECHA_MATRICULO) < 8 and ST_V.id_radicado =GS_RADICADO
+        
+        union
+        
+        Select iv_Transito Secretaria, 
+               'Vehiculos No Reportados En Tramites' Inconsistencia, 'Vehiculos' ARCHIVO, sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        left join TMP_TRAMITES st on st.nro_placa = sv.nro_placa and sv.id_radicado = st.Id_radicado
+        where st.nro_placa is null and sv.id_radicado =GS_RADICADO
+        
+        union
+        
+        Select  iv_Transito Secretaria, 
+               'Vehiculos No Reportados En Propietarios' Inconsistencia, 'Vehiculos' ARCHIVO, sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        left join TMP_propietarios sp on sp.nro_placa = sv.nro_placa and sv.id_radicado = sp.Id_radicado
+        where sp.nro_placa is null and sv.id_radicado =GS_RADICADO
+        
+        union
+        
+        --Carrocerias x clase Vehiculos
+        select  iv_Transito Secretaria, 
+               'Carroceria Sin Relacion a La Clase (Vehiculos)' Inconsistencia,'VEHICULOS' ARCHIVO, sv.* , sv.rowid
+        from TMP_VEHICULOS sv
+        left join CORRECCION_DATOS.RUNT_CARROCERIAS_X_CLASE rc
+                on rc.codigo_clase = REPLACE (sv.id_clase,'.','') and rc.codigo_carroceria_ws = REPLACE (SV.ID_CARROCERIA,'.','')
+        where RC.CODIGO_CARROCERIA_WS is null And Sv.Id_Carroceria is Not null and sv.id_radicado =GS_RADICADO 
+        
+        
+        union
+        
+        --Lineas sin relacion a la marca transformacion
+        select  iv_Transito As Secretaria, 
+               'Linea Sin Relacion a La Marca' Inconsistencia,'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        left join CORRECCION_DATOS.runt_linea rl
+                on rl.codigo_marca = REPLACE (sv.id_marca,'.','') and rl.codigo_linea_ws = REPLACE (sv.ID_LINEA,'.','')
+        where  rl.codigo_linea_ws is null And Id_Linea is not null and sv.id_radicado =GS_RADICADO 
+        
+        union
+        
+        --Id_Marca con punto
+        select  iv_Transito Secretaria, 
+               'Id_Marca con punto' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where sv.id_marca like '%.%' and sv.id_radicado =GS_RADICADO
+        
+        union
+        
+        --Id_Linea con punto
+        select  iv_Transito Secretaria, 
+               'Id_Linea con punto' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where sv.id_linea like '%.%' and sv.id_radicado =GS_RADICADO
+        
+        union
+        
+        --Id_Linea con punto
+        select iv_Transito Secretaria, 
+               'Modelo con punto' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where sv.modelo like '%.%' and sv.id_radicado =GS_RADICADO
+        
+        union
+        
+        --VALIDACION DE CAMPOS NULL
+        
+        select  iv_Transito Secretaria, 
+               'Id_Marca Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Id_Marca is null  and sv.id_radicado =GS_RADICADO 
+        
+        union
+        
+        select  iv_Transito Secretaria, 
+               'Nro_placa Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  Sv.nro_placa is null and sv.id_radicado =GS_RADICADO 
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Id_Linea Null' Inconsistencia,'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.id_linea is null  and sv.id_radicado =GS_RADICADO 
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Modelo Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Modelo is null  and sv.id_radicado =GS_RADICADO
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Id_Clase Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.ID_CLASE is null  and sv.id_radicado =GS_RADICADO
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Id_Servicio Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Id_Servicio is null and sv.id_radicado =GS_RADICADO 
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Id_Carroceria Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Id_Carroceria is null and sv.id_radicado =GS_RADICADO 
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Id_Combustible Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Id_Combustible is null  and sv.id_radicado =GS_RADICADO
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Id_Secretaria Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Id_Secretaria is null  and sv.id_radicado =GS_RADICADO
+        
+        union 
+        select  iv_Transito Secretaria,
+        'Cilindraje Null o Cero' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  (SV.Cilindraje  is null or SV.Cilindraje = 0) And Id_Combustible Not In (5)
+        And sv.id_radicado =GS_RADICADO
+        
+        union 
+        
+        select  iv_Transito Secretaria, 
+               'Valor_Factura Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Valor_Factura is null  and sv.id_radicado =GS_RADICADO
+        
+        union 
+        
+        select   iv_Transito Secretaria, 
+               'Fecha_Matriculo Null' Inconsistencia, 'VEHICULOS' ARCHIVO,sv.*, sv.rowid
+        from TMP_VEHICULOS sv
+        where  SV.Fecha_Matriculo is null  and sv.id_radicado =GS_RADICADO;
+
+Begin 
+
+    
+        For Ln_Index In lcur_vehiculos Loop
+            lutl_archivo := UTL_FILE.FOPEN('DIR_CORECCION',lv_Archivo,'W'); 
+        Begin
+             
+            If lb_Existe = False Then
+                UTL_FILE.PUT_LINE(lutl_archivo,'SECRETARIA;'||'INCONSISTENCIA;'||'ARCHIVO;'||'NRO_PLACA;'||'ID_MARCA;'||'NOMBRE_MARCA;'
+                                                ||'ID_LINEA;'||'NOMBRE_LINEA;'||'MODELO;'||'ID_CLASE;'||'NOMBRE_CLASE;'||'ID_SERVICIO;'
+                                                ||'NOMBRE_SERVICIO;'||'ID_CARROCERIA;'||'NOMBRE_CARROCERIA;'||'NRO_PUERTAS;'
+                                                ||'ID_COMBUSTIBLE;'||'NOMBRE_COMBUSTIBLE;'||'ID_BATERIA;'||'NOMBRE_BATERIA;'
+                                                ||'POTENCIA;'||'ID_SECRETARIA;'||'NOMBRE_SECRETARIA;'||'CILINDRAJE;'||'CAP_PASAJEROS;'
+                                                ||'CAP_TONELADAS;'||'VALOR_FACTURA;'||'BLINDADO;'||'IMPORTADO_NACIONAL;'||'ID_ESTADO;'
+                                                ||'NOMBRE_ESTADO;'||'CLASICO_ANTIGUO;'||'FECHA_MATRICULO;'||'ID_RADICADO;'||'ID_MARCA2;'
+                                                ||'ID_LINEA2;'||'CAJA;'||'TRACCION;'||'COMBUSTION');
+                     lb_Existe:=True;
+            End If;
+            UTL_FILE.PUT_LINE(lutl_archivo,iv_Transito||';'
+            ||Ln_Index.INCONSISTENCIA||';'
+            ||Ln_Index.ARCHIVO||';'
+            ||Ln_Index.NRO_PLACA||';'
+            ||Ln_Index.ID_MARCA||';'
+            ||Ln_Index.NOMBRE_MARCA||';'
+            ||Ln_Index.ID_LINEA||';'
+            ||Ln_Index.NOMBRE_LINEA||';'
+            ||Ln_Index.MODELO||';'
+            ||Ln_Index.ID_CLASE||';'
+            ||Ln_Index.NOMBRE_CLASE||';'
+            ||Ln_Index.ID_SERVICIO||';'
+            ||Ln_Index.NOMBRE_SERVICIO||';'
+            ||Ln_Index.ID_CARROCERIA||';'
+            ||Ln_Index.NOMBRE_CARROCERIA||';'
+            ||Ln_Index.NRO_PUERTAS||';'
+            ||Ln_Index.ID_COMBUSTIBLE||';'
+            ||Ln_Index.NOMBRE_COMBUSTIBLE||';'
+            ||Ln_Index.ID_BATERIA||';'
+            ||Ln_Index.NOMBRE_BATERIA||';'
+            ||Ln_Index.POTENCIA||';'
+            ||Ln_Index.ID_SECRETARIA||';'
+            ||Ln_Index.NOMBRE_SECRETARIA||';'
+            ||Ln_Index.CILINDRAJE||';'
+            ||Ln_Index.CAP_PASAJEROS||';'
+            ||Ln_Index.CAP_TONELADAS||';'
+            ||Ln_Index.VALOR_FACTURA||';'
+            ||Ln_Index.BLINDADO||';'
+            ||Ln_Index.IMPORTADO_NACIONAL||';'
+            ||Ln_Index.ID_ESTADO||';'
+            ||Ln_Index.NOMBRE_ESTADO||';'
+            ||Ln_Index.CLASICO_ANTIGUO||';'
+            ||Ln_Index.FECHA_MATRICULO||';'
+            ||Ln_Index.ID_RADICADO||';'
+            ||Ln_Index.ID_MARCA2||';'
+            ||Ln_Index.ID_LINEA2||';'
+            ||Ln_Index.CAJA||';'
+            ||Ln_Index.TRACCION||';'
+            ||Ln_Index.COMBUSTION);
+                
+                Delete From tmp_vehiculos
+                Where Rowid = Ln_Index.rowid;
+            
+            Exception 
+                When Others Then 
+                    Dbms_Output.Put_Line(sqlerrm||Dbms_Utility.Format_Error_Backtrace||' '||'Sp_Vehiculos'); 
+        End;   
+        End Loop;
+        Commit;
+         UTL_FILE.FCLOSE(lutl_archivo); 
+         
+END Sp_Inconsistencia_Vehiculos;
+
+Procedure Sp_Iniciar_Inconsistencia (as_id_radicado Simple_Integer) AS
+
+/*ISVA
+Nombre     :Sp_Iniciar_Inconsistencia
+Autor      :Blados.Ospina
+Fecha      :07/05/18
+Parametros :iv_Transito
+Retorno    :          
+Proyecto   :PKG_INCONSISTENCIAS_TRANSITOS
+VersiÛn    :1.0
+Objetivo   :Ejecuta todos los procesos del pl-sql
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor           Version  Modificacion   
+07/05/2018  Blados.Ospina   1.0                     */
+
+BEGIN
+
+GS_RADICADO := as_id_radicado;
+
+    Sp_Registrar_Transito;
+    SP_Inconsistencia_Vehiculos;
+    /*Sp_Inconsistencia_Tramites;
+    Sp_Inconsistencia_Propietarios;
+    Sp_Inconsistencia_Contribuyent;
+    Sp_Validar_Histo_Traspasos;
+    Sp_Detalle_Inconsistencia; */
+    
+END Sp_Iniciar_Inconsistencia;
+
+END PKG_INCONSISTENCIAS_PRUEBA;
