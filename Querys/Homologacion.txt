@@ -1,0 +1,512 @@
+create or replace PACKAGE BODY                        PKG_HOMOLOGACIONVEHICULOS IS
+
+--Variables type
+TYPE tvarray_cdcabina IS TABLE OF VARCHAR2(20);
+ivtype_cdcabina tvarray_cdcabina:= tvarray_cdcabina();
+
+--Variables type
+TYPE tvarray_carga IS TABLE OF VARCHAR2(20);
+ivtype_carga tvarray_carga:= tvarray_carga();
+
+--Variables type
+TYPE tvarray_ccerrada IS TABLE OF VARCHAR2(20);
+ivtype_ccerrada  tvarray_ccerrada:= tvarray_ccerrada();
+
+--Contador de commit
+in_commit NUMBER :=0;
+
+
+PROCEDURE SP_COMMIT IS
+/*
+ @QUIPUX S.A.S
+ @Nombre    : SP_COMMIT
+ @Autor     : luis.vasquez
+ @Fecha     : 26/10/2016
+ @Parametro : N/A
+ @Retorno   : N/A
+ @Proyecto  : QXIMPUESSTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Permite controlar cuando realizar commit al proceso 
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeti te tipo privado.
+ */ 
+BEGIN
+in_commit :=in_commit + 1;
+ IF in_commit = GN_REALIZARCOMMIT THEN
+    in_commit:=0;
+    COMMIT;
+  END IF;
+END SP_COMMIT;
+
+PROCEDURE SP_ERROR_MIGRACION(avs_descripcion VARCHAR2,avs_proceso_error VARCHAR2) IS
+/*
+ @QUIPUX S.A.S
+ @Nombre    : SP_ERROR_MIGRACION
+ @Autor     : luis.vasquez
+ @Fecha     : 26/10/2016
+ @Parametro : avs_descripcion : Descripción de la novedad
+              avs_proceso_error : Función o procedimiento que presento errores.
+ @Retorno   : N/A
+ @Proyecto  : QXIMPUESSTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Permite insertar los errores del proceso que se presenten en la homologación 
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeti te tipo privado.
+ */ 
+BEGIN
+  INSERT INTO homologacion_vehiculos.error_homologacion 
+       VALUES (homologacion_vehiculos.seq_error_homologacion.NEXTVAL,
+                avs_descripcion,
+                avs_proceso_error,
+                SYSDATE);
+  SP_COMMIT;
+EXCEPTION WHEN OTHERS THEN
+  ROLLBACK;
+  Dbms_Output.Put_Line(sqlerrm||' '||DBMS_UTILITY.FORMAT_ERROR_BACKTRACE);
+END SP_ERROR_MIGRACION;
+
+FUNCTION FT_PARAMETROHOMOLOGACION(an_parametro NUMBER) RETURN VARCHAR2 IS
+/*
+ @QUIPUX S.A.S
+ @Nombre    : FT_PARAMETROHOMOLOGACION
+ @Autor     : luis.vasquez
+ @Fecha     : 18/01/2011
+ @Parametro : N/A
+ @Retorno   : Valor del parametro consultado
+ @Proyecto  : QXIMPUESTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Permite consultar datos de parametrización del proceso 
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeto te tipo privado.
+ */
+ 
+ lv_valor homologacion_vehiculos.parametros_homologacion.valor%TYPE :='';
+ 
+ BEGIN
+    SELECT valor
+    INTO lv_valor
+    FROM homologacion_vehiculos.parametros_homologacion
+    WHERE id_parametro = an_parametro;
+  RETURN lv_valor;  
+ EXCEPTION WHEN OTHERS THEN
+  SP_ERROR_MIGRACION(sqlerrm||' '||DBMS_UTILITY.FORMAT_ERROR_BACKTRACE,'FT_PARAMETROHOMOLOGACION');
+  RETURN lv_valor;
+ END FT_PARAMETROHOMOLOGACION;
+ 
+FUNCTION FT_CARGARPARAMETRIZACION RETURN NUMBER IS
+/*
+ @QUIPUX S.A.S
+ @Nombre    : FT_CARGARPARAMETRIZACION
+ @Autor     : luis.vasquez
+ @Fecha     : 18/01/2011
+ @Parametro : N/A
+ @Retorno   : GN_OK : Si no s epresentan errores
+              GN_FALLO : Si alguna novedad no cumple
+              GN_ERROR : Si se presentan errores en el proceso
+ @Proyecto  : QXIMPUESTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Cargar la parametrización inicial del proceso 
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeti te tipo privado.
+ */
+
+CURSOR lcur_carroceria(an_clase NUMBER)IS
+  SELECT tc.codigo_sap codigo
+  FROM homologacion_vehiculos.tipo_carroceria tc
+    INNER JOIN homologacion_vehiculos.tipo_clase_carroceria tcc
+      ON tc.id_carroceria = tcc.id_carroceria
+  WHERE tcc.id_clase =an_clase;
+  
+ ln_retorno NUMBER(3):=GN_OK; 
+BEGIN
+  --Se realiza la carga de la parametrización para doble cabina
+  FOR ln_index IN lcur_carroceria(GB_DOBLECABINA)LOOP
+    ivtype_cdcabina.EXTEND;
+    ivtype_cdcabina(ivtype_cdcabina.LAST) := ln_index.codigo;
+  END LOOP;
+  
+  --Se realiza la carga de la parametrización para carga
+   FOR ln_index IN lcur_carroceria(GB_CARGA)LOOP
+    ivtype_carga.EXTEND;
+    ivtype_carga(ivtype_carga.LAST) := ln_index.codigo;
+  END LOOP;
+  
+  --Se realiza la carga de la parametrización para cerrados
+   FOR ln_index IN lcur_carroceria(GB_CERRADA)LOOP
+    ivtype_ccerrada.EXTEND;
+    ivtype_ccerrada(ivtype_ccerrada.LAST) := ln_index.codigo;
+  END LOOP;
+  
+  --Se consulta  cuantas veces realizara commit;
+  GN_REALIZARCOMMIT :=TO_NUMBER(FT_PARAMETROHOMOLOGACION(0));
+  GN_COMODIN :=FT_PARAMETROHOMOLOGACION(1);
+  
+  IF ivtype_cdcabina.COUNT <1 OR ivtype_carga.COUNT <1 OR ivtype_ccerrada.COUNT <1  OR GN_REALIZARCOMMIT < 1  OR
+      TO_NUMBER(GN_COMODIN) <1 OR TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOINICIALA)) <1  OR TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOFINALA)) <1
+      OR TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOINICIALE)) <1 OR TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOFINALE)) <1 THEN
+      ln_retorno:= GN_FALLO;
+  END IF;
+  
+  RETURN ln_retorno;
+EXCEPTION WHEN OTHERS THEN
+  SP_ERROR_MIGRACION(sqlerrm||' '||DBMS_UTILITY.FORMAT_ERROR_BACKTRACE,'FT_CARGARPARAMETRIZACION');
+  RETURN GN_ERROR;
+END FT_CARGARPARAMETRIZACION;
+
+FUNCTION FT_PROCESOCLASE RETURN NUMBER IS
+/*
+ @QUIPUX S.A.S
+ @Nombre    : FT_PROCESOCLASE
+ @Autor     : luis.vasquez
+ @Fecha     : 18/01/2011
+ @Parametro : N/A
+ @Retorno   : GN_OK : Si no s epresentan errores
+              GN_FALLO : Si alguna novedad no cumple
+              GN_ERROR : Si se presentan errores en el proceso
+ @Proyecto  : QXIMPUESTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Permite realalizar el proceso de validación de carrocerias
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeto te tipo privado.
+ */
+ --Cursor inicial del disparador del proceso
+  CURSOR lcur_maestro(an_clase NUMBER) IS
+      SELECT * 
+      FROM homologacion_vehiculos.maestro_proceso 
+      WHERE id_clase =an_clase;
+  
+  CURSOR lcur_clases IS
+    SELECT id_clase clase
+    FROM homologacion_vehiculos.tipo_clase;
+
+  ln_retorno NUMBER(3):=GN_OK; 
+  lt_clase homologacion_vehiculos.maestro_clase.codigo_clase%TYPE;
+
+BEGIN
+
+  FOR ln_indexclase IN lcur_clases LOOP
+ 
+    CASE --Cuando sean automoviles,motos,pasajeros  y electricos simplemente se mueve a al proceso de veigencias
+      WHEN ln_indexclase.clase=1 OR ln_indexclase.clase= 4 OR ln_indexclase.clase=5 OR ln_indexclase.clase= 6 THEN
+        FOR ln_index IN lcur_maestro(ln_indexclase.clase) LOOP
+          INSERT INTO homologacion_vehiculos.maestro_clase
+          VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                  ln_index.id_clase,
+                  ln_index.caso,
+                  ln_index.grupo,
+                  ln_index.codigo_marca,
+                  ln_index.codigo_linea,
+                  ln_index.codigo_clase,
+                  ln_index.codigo_uso,
+                  ln_index.cilindraje,
+                  ln_index.carroceria,
+                  ln_index.fabricacion,
+                  ln_index.toneladas,
+                  ln_index.tipo_carga,
+                  ln_index.tipo_caja,
+                  ln_index.puertas,
+                  ln_index.combustion_aire);
+              SP_COMMIT;    
+        END LOOP;
+      --Si la clase es campero se valida si tiene el comidin de campero y camioneta, si lo tiene
+      --Se insertan las lineas relacionadas, de lo contrario simplemente movemos el registro
+      WHEN ln_indexclase.clase=2 THEN
+         FOR ln_index IN lcur_maestro(ln_indexclase.clase) LOOP
+          IF  ln_index.codigo_clase = GN_COMODIN THEN
+              FOR ln_idxarray IN ivtype_ccerrada.FIRST .. ivtype_ccerrada.LAST LOOP
+                INSERT INTO homologacion_vehiculos.maestro_clase
+                VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                    ln_index.id_clase,
+                    ln_index.caso,
+                    ln_index.grupo,
+                    ln_index.codigo_marca,
+                    ln_index.codigo_linea,
+                    '05',
+                    ln_index.codigo_uso,
+                    ln_index.cilindraje,
+                    ivtype_ccerrada(ln_idxarray),--Cambiamos el valor por el del array
+                    ln_index.fabricacion,
+                    ln_index.toneladas,
+                    ln_index.tipo_carga,
+                    ln_index.tipo_caja,
+                    ln_index.puertas,
+                    ln_index.combustion_aire);
+                SP_COMMIT;    
+              END LOOP;
+              INSERT INTO homologacion_vehiculos.maestro_clase
+                VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                    ln_index.id_clase,
+                    ln_index.caso,
+                    ln_index.grupo,
+                    ln_index.codigo_marca,
+                    ln_index.codigo_linea,
+                    '06',
+                    ln_index.codigo_uso,
+                    ln_index.cilindraje,
+                    NULL,
+                    ln_index.fabricacion,
+                    ln_index.toneladas,
+                    ln_index.tipo_carga,
+                    ln_index.tipo_caja,
+                    ln_index.puertas,
+                    ln_index.combustion_aire);
+                SP_COMMIT;        
+          ELSE
+            INSERT INTO homologacion_vehiculos.maestro_clase
+            VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                    ln_index.id_clase,
+                    ln_index.caso,
+                    ln_index.grupo,
+                    ln_index.codigo_marca,
+                    ln_index.codigo_linea,
+                    ln_index.codigo_clase,
+                    ln_index.codigo_uso,
+                    ln_index.cilindraje,
+                    ln_index.carroceria,
+                    ln_index.fabricacion,
+                    ln_index.toneladas,
+                    ln_index.tipo_carga,
+                    ln_index.tipo_caja,
+                    ln_index.puertas,
+                    ln_index.combustion_aire);
+                SP_COMMIT;    
+          END IF; 
+         END LOOP;
+      --Si es doble cabina, cada registro se divide en dos con carroceria ambulancia, y clases campero y camioneta
+      WHEN ln_indexclase.clase=8 THEN
+         FOR ln_index IN lcur_maestro(ln_indexclase.clase) LOOP
+            FOR ln_idxarray IN 1 .. 2 LOOP
+                IF ln_idxarray =1 THEN
+                    lt_clase:='05';
+                ELSE
+                  lt_clase:='06';
+                END IF;
+                --Insertamos el registro con la codificación
+                INSERT INTO homologacion_vehiculos.maestro_clase
+                VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                    ln_index.id_clase,
+                    ln_index.caso,
+                    ln_index.grupo,
+                    ln_index.codigo_marca,
+                    ln_index.codigo_linea,
+                    lt_clase,
+                    ln_index.codigo_uso,
+                    ln_index.cilindraje,
+                    '20',
+                    ln_index.fabricacion,
+                    ln_index.toneladas,
+                    ln_index.tipo_carga,
+                    ln_index.tipo_caja,
+                    ln_index.puertas,
+                    ln_index.combustion_aire);
+                  SP_COMMIT;    
+            END LOOP;
+         END LOOP;
+      --Para las clases camionetas y de carga se validan que si la carroceria es null asignar los nuevos registros
+      --relacionados, según el caso de lo contrario simplemente se mueve a la tabla de clases
+      WHEN ln_indexclase.clase=3 OR ln_indexclase.clase=7 THEN
+        FOR ln_index IN lcur_maestro(ln_indexclase.clase) LOOP
+          IF  ln_index.carroceria IS NOT NULL THEN
+            INSERT INTO homologacion_vehiculos.maestro_clase
+            VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                    ln_index.id_clase,
+                    ln_index.caso,
+                    ln_index.grupo,
+                    ln_index.codigo_marca,
+                    ln_index.codigo_linea,
+                    ln_index.codigo_clase,
+                    ln_index.codigo_uso,
+                    ln_index.cilindraje,
+                    ln_index.carroceria,
+                    ln_index.fabricacion,
+                    ln_index.toneladas,
+                    ln_index.tipo_carga,
+                    ln_index.tipo_caja,
+                    ln_index.puertas,
+                    ln_index.combustion_aire);
+                SP_COMMIT; 
+          ELSE
+            IF ln_indexclase.clase=3 THEN
+                FOR ln_idxarray IN ivtype_cdcabina.FIRST .. ivtype_cdcabina.LAST LOOP
+                  INSERT INTO homologacion_vehiculos.maestro_clase
+                  VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                      ln_index.id_clase,
+                      ln_index.caso,
+                      ln_index.grupo,
+                      ln_index.codigo_marca,
+                      ln_index.codigo_linea,
+                      '05',
+                      ln_index.codigo_uso,
+                      ln_index.cilindraje,
+                      ivtype_cdcabina(ln_idxarray),--Cambiamos el valor por el del array
+                      ln_index.fabricacion,
+                      ln_index.toneladas,
+                      ln_index.tipo_carga,
+                      ln_index.tipo_caja,
+                      ln_index.puertas,
+                      ln_index.combustion_aire);
+                      SP_COMMIT;    
+                END LOOP;
+              ELSE
+                FOR ln_idxarray IN ivtype_ccerrada.FIRST .. ivtype_ccerrada.LAST LOOP
+                  INSERT INTO homologacion_vehiculos.maestro_clase
+                  VALUES (homologacion_vehiculos.seq_maestro_clase.NEXTVAL,
+                      ln_index.id_clase,
+                      ln_index.caso,
+                      ln_index.grupo,
+                      ln_index.codigo_marca,
+                      ln_index.codigo_linea,
+                      '05',
+                      ln_index.codigo_uso,
+                      ln_index.cilindraje,
+                      ivtype_ccerrada(ln_idxarray),--Cambiamos el valor por el del array
+                      ln_index.fabricacion,
+                      ln_index.toneladas,
+                      ln_index.tipo_carga,
+                      ln_index.tipo_caja,
+                      ln_index.puertas,
+                      ln_index.combustion_aire);
+                      SP_COMMIT;    
+                END LOOP;
+            END IF;
+          END IF;
+        END LOOP;
+    END CASE;
+  END LOOP;
+  
+ RETURN ln_retorno;
+EXCEPTION WHEN OTHERS THEN
+  SP_ERROR_MIGRACION(sqlerrm||' '||DBMS_UTILITY.FORMAT_ERROR_BACKTRACE,'FT_PROCESOCLASE');
+  RETURN GN_ERROR; 
+END FT_PROCESOCLASE;
+
+FUNCTION FT_PROCESOVIGENCIA RETURN NUMBER IS
+/*
+ @QUIPUX S.A.S
+ @Nombre    : FT_PROCESOVIGENCIA
+ @Autor     : luis.vasquez
+ @Fecha     : 18/01/2011
+ @Parametro : N/A
+ @Retorno   : GN_OK : Si no s epresentan errores
+              GN_FALLO : Si alguna novedad no cumple
+              GN_ERROR : Si se presentan errores en el proceso
+ @Proyecto  : QXIMPUESTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Permite realalizar el proceso de asignación de modelos a cada registro
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeto te tipo privado.
+ */
+CURSOR lcur_datosclase IS
+  SELECT * 
+  FROM homologacion_vehiculos.maestro_clase;
+  
+  ln_rangoinicial NUMBER(4):=0;
+  ln_rangofinal   NUMBER(4):=0;
+  ln_retorno      NUMBER(3):=GN_OK; 
+BEGIN
+
+  FOR ln_index IN lcur_datosclase LOOP
+    IF ln_index.caso =GB_ANTERIORES THEN
+        ln_rangoinicial :=TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOINICIALA));
+        ln_rangofinal :=TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOFINALA));
+    ELSE
+        ln_rangoinicial :=TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOINICIALE));
+        ln_rangofinal :=TO_NUMBER(FT_PARAMETROHOMOLOGACION(GB_RANGOFINALE));
+    END IF;
+    
+    FOR ln_indexrango IN ln_rangoinicial .. ln_rangofinal LOOP
+        
+        INSERT INTO homologacion_vehiculos.maestro_modelo 
+        VALUES(homologacion_vehiculos.seq_maestro_vigencia.NEXTVAL,
+                ln_index.id_clase,
+                ln_index.caso,
+                ln_index.grupo,
+                ln_index.codigo_marca,
+                ln_index.codigo_linea,
+                ln_index.codigo_clase,
+                ln_index.codigo_uso,
+                ln_index.cilindraje,
+                ln_index.carroceria,
+                ln_index.fabricacion,
+                ln_index.toneladas,
+                ln_index.tipo_carga,
+                ln_index.tipo_caja,
+                ln_index.puertas,
+                ln_index.combustion_aire,
+                ln_indexrango);
+           SP_COMMIT;  
+    END LOOP;  
+  END LOOP;
+
+ RETURN ln_retorno;
+EXCEPTION WHEN OTHERS THEN
+  SP_ERROR_MIGRACION(sqlerrm||' '||DBMS_UTILITY.FORMAT_ERROR_BACKTRACE,'FT_PROCESOVIGENCIA');
+  RETURN GN_ERROR; 
+END FT_PROCESOVIGENCIA;
+
+PROCEDURE SP_INICIAR IS 
+/*
+ @QUIPUX S.A.S
+ @Nombre    : SP_INICIAR
+ @Autor     : luis.vasquez
+ @Fecha     : 26/10/2016
+ @Parametro : N/A
+ @Retorno   : N/A
+ @Proyecto  : QXIMPUESSTOS PLUS
+ @Versión   : N/A
+ Objetivo   : Permite iniciar el proceso de homologación 
+ ******************************************************************************************
+ @control de cambios realizados por desarrolladores
+ ******************************************************************************************
+ @Autor           @Fecha      @Modificación
+ luis.vasquez     18/01/2017   Se realiza la creación del objeto de tipo público.
+ */ 
+ ln_retorno NUMBER(4):=0;
+BEGIN
+  ln_retorno:=FT_CARGARPARAMETRIZACION();
+  IF ln_retorno =GN_FALLO OR ln_retorno =GN_ERROR THEN
+    dbms_output.put_line('No se puede ejecutar el proceso ya que falta parámetrización, por favor revisar '||
+    'las tablas tipo y párametro de procesos');
+  ELSE
+    --Validación de proceso de clases
+    IF UPPER(FT_PARAMETROHOMOLOGACION(GB_PARAMCLASES))='S'THEN
+        ln_retorno:=FT_PROCESOCLASE();
+        IF ln_retorno =GN_FALLO OR ln_retorno =GN_ERROR THEN
+          dbms_output.put_line('Se presentaron errores realizando el proceso de homologación de clases, '||
+          'se debe verificar la tabla de errores del sistema. Proceso interrumpido');
+        END IF;
+    END IF;
+    
+    --Validación de proceso de modelos
+    IF UPPER(FT_PARAMETROHOMOLOGACION(GB_PARAMVIGENCIAS))='S'THEN
+        ln_retorno:=FT_PROCESOVIGENCIA();
+        IF ln_retorno =GN_FALLO OR ln_retorno =GN_ERROR THEN
+          dbms_output.put_line('Se presentaron errores realizando el proceso de homologación de modelos, '||
+          'se debe verificar la tabla de errores del sistema. Proceso interrumpido');
+        END IF;
+    END IF;
+  END IF;
+  
+ EXCEPTION WHEN OTHERS THEN
+  SP_ERROR_MIGRACION(sqlerrm||' '||DBMS_UTILITY.FORMAT_ERROR_BACKTRACE,'SP_INICIAR');
+END SP_INICIAR;
+
+END PKG_HOMOLOGACIONVEHICULOS;

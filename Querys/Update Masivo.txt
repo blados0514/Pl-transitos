@@ -1,0 +1,11 @@
+MERGE
+INTO    Fc_Maestro_Transitos Ft
+USING   (
+        SELECT  Distinct T1.Municipio As Municipio, T2.Codigo As Cod
+        FROM    Fc_Municipio_Departamento T1
+        JOIN    Fc_Maestro_Transitos T2
+        ON      T1.Divipo = T2.Codigo
+        ) src
+ON      (Ft.Codigo = src.Cod)
+WHEN MATCHED THEN UPDATE
+    SET Ft.Nombre = Municipio;

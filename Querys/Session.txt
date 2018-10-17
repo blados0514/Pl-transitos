@@ -1,0 +1,2 @@
+Select UserName,SchemaName,Status,OsUser From v$Session
+Where UserName is not null;
