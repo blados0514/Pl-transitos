@@ -1,4 +1,4 @@
---head
+--head pl-sql
 
 create or replace PACKAGE                                                                                 PGK_CONSULTAS_MASIVAS_TTO AS 
 
@@ -8,8 +8,8 @@ Procedure Sp_Iniciar (as_Propietarios Simple_Integer,
                       as_Novedades Simple_Integer,
                       as_Historico_Traspaso Simple_Integer);
 
-
 END PGK_CONSULTAS_MASIVAS_TTO;
+
 
 
 
