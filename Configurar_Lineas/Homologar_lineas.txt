@@ -1,0 +1,68 @@
+--create blados
+
+create or replace PROCEDURE EJEMPLO (av_linea VARCHAR)  AS 
+
+
+
+linea_runt VARCHAR(255):=av_linea; 
+linea_temp VARCHAR(255):=av_linea;
+
+linea_runt_temp VARCHAR(255):='';
+lv_validador_temp VARCHAR2(255);
+
+
+ln_ultimo_caracter NUMBER:=0;
+lv_ultimo_caracter VARCHAR2(2);
+
+
+CURSOR lcur_caracteristicas IS SELECT caracteristica FROM correccion_datos.dq_caracteristicas;
+
+Begin
+
+    FOR ln_index IN lcur_caracteristicas LOOP
+        IF LENGTH(ln_index.caracteristica) = 2 THEN
+              FOR I IN 1..LENGTH(linea_runt) LOOP
+                lv_validador_temp:='';
+                  FOR M IN I..I+2 LOOP
+                     lv_validador_temp := lv_validador_temp || SUBSTR(linea_runt,M,1);
+                     ln_ultimo_caracter := I+3;
+                     lv_ultimo_caracter := SUBSTR(linea_runt,ln_ultimo_caracter,1);
+                  END LOOP;
+                   IF lv_ultimo_caracter IS NOT NULL AND lv_ultimo_caracter NOT IN ('') THEN
+                        NULL;    
+                   ELSIF lv_ultimo_caracter IN ('',' ') OR lv_ultimo_caracter IS NULL THEN
+                        IF lv_validador_temp = ln_index.caracteristica||' ' THEN
+                                 linea_runt_temp:= REPLACE(linea_runt,ln_index.caracteristica||' ','');
+                                 linea_runt := linea_runt_temp;
+                        ELSIF lv_validador_temp = ' '||ln_index.caracteristica THEN
+                                 linea_runt_temp := REPLACE(linea_runt,' '||ln_index.caracteristica,'');
+                                 linea_runt := linea_runt_temp;
+                        END IF; 
+                  END IF;
+                END LOOP;
+        ELSE
+            FOR I IN 1..LENGTH(linea_runt) LOOP
+                lv_validador_temp:='';
+                FOR M IN I..I+3 LOOP
+                     lv_validador_temp := lv_validador_temp || SUBSTR(linea_runt,M,1);
+                END LOOP;
+                IF lv_validador_temp = ln_index.caracteristica||' ' THEN
+                         linea_runt_temp:= REPLACE(linea_runt,ln_index.caracteristica||' ','');
+                         linea_runt := linea_runt_temp;
+                ELSIF lv_validador_temp = ' '||ln_index.caracteristica THEN
+                         linea_runt_temp := REPLACE(linea_runt,' '||ln_index.caracteristica,'');
+                         linea_runt := linea_runt_temp;
+                ELSIF lv_validador_temp = '-'||ln_index.caracteristica THEN
+                         linea_runt_temp := REPLACE(linea_runt,'-'||ln_index.caracteristica||'-',' ');
+                         linea_runt := linea_runt_temp;
+                END IF;         
+            END LOOP;
+        END IF;
+            
+     END LOOP;
+
+DBMS_OUTPUT.put_line(linea_temp);  
+DBMS_OUTPUT.put_line(linea_runt);
+
+
+END EJEMPLO;
