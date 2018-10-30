@@ -1,0 +1,77 @@
+FUNCTION FT_VALIDAR_DIR(lfDireccion varchar2) return number as
+
+lvDireccion Varchar2(100);
+lvEstructuraTemp varchar2(100);
+lvEstructura varchar2(100);
+lvCaracter varchar2(1);
+lvCaracterAnteriorAnterior varchar2(1);
+lvCaracterAnterior varchar2(1) :='*';
+lnLongitud Number:=0;
+lnContador Number:=2;
+lnCumple Number:=0;
+lnBloqueNumero number := 0;
+lnBloqueCaracter number := 0;
+
+begin
+ -- lvCaracterAnterior:='';
+  --Remplazo Caracteres Letras Por "~" Y Numeros Por "@" Para Comparar Mas Facilmente El Formato
+  lvDireccion := Trim(lfDireccion);
+  lvDireccion := replace(lvDireccion,'-',' ');  
+  lvDireccion := TRANSLATE(Upper(lvDireccion),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','~~~~~~~~~~~~~~~~~~~~~~~~~~');
+  lvDireccion := TRANSLATE(lvDireccion,'0123456789','@@@@@@@@@@');  
+
+lnLongitud:= length(lvDireccion);
+
+lvEstructura := Substr(lvDireccion,1,1); -- Mapeo el primer caracter
+
+While lnContador <= lnLongitud  
+Loop
+  lvCaracter := Substr(lvDireccion,lnContador,1);  
+ -- lvCaracterSiguiente := Substr(lvDireccion, (lnContador - 2),1);
+  
+  --Permite validar las direcciones con estructura CL 10 1020 o CL 10B 1020
+  If(lvEstructura In ('~ @ ','~ @ ~ ')) Then
+      if(Substr(lvDireccion,lnContador,4) = '@@@@') then
+        lvEstructura := lvEstructura || '@@@@';
+        return 0;
+      End if;  
+  End If;
+  
+  If lvCaracter = '~' Then   
+    If (lvCaracter != lvCaracterAnterior)then 
+      If(lvCaracter != lvCaracterAnteriorAnterior) Then    
+         lvEstructura := lvEstructura || lvCaracter;
+         lvCaracterAnteriorAnterior := lvCaracterAnterior;
+         lvCaracterAnterior := lvCaracter;
+       End If;
+    End If;
+  Elsif lvCaracter = '@' Then   
+    If lvCaracter != lvCaracterAnterior Then
+       lvEstructura := lvEstructura || lvCaracter;
+       lvCaracterAnteriorAnterior := lvCaracterAnterior;
+       lvCaracterAnterior := lvCaracter;
+    End If;
+  Elsif lvCaracter = ' ' Then
+    If lvCaracter != lvCaracterAnterior Then
+        lvEstructura := lvEstructura || lvCaracter;
+         lvCaracterAnteriorAnterior := lvCaracterAnterior;
+         lvCaracterAnterior := lvCaracter;
+    End If;
+  End If; 
+  
+  lnContador := lnContador + 1;  
+  
+End Loop;  
+
+-- Valido que la dirección tenga estructura válida
+Select count(1) into lnCumple
+from fc_estructura_Direccion 
+where lvEstructura like '%' || Estructura ||'%';
+
+If(lnCumple > 0)then
+  Return 1;
+else
+  Return 0;
+end if;
+
+END FT_VALIDAR_DIR;

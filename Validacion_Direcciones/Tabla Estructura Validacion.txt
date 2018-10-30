@@ -1,0 +1,21 @@
+--------------------------------------------------------
+-- Archivo creado  - martes-octubre-30-2018   
+--------------------------------------------------------
+--------------------------------------------------------
+--  DDL for Table FC_ESTRUCTURA_DIRECCION
+--------------------------------------------------------
+
+  CREATE TABLE "BD_FISCALIZACION"."FC_ESTRUCTURA_DIRECCION" 
+   (	
+    "ID" NUMBER, 
+	"ESTRUCTURA" VARCHAR2(100 BYTE), 
+	"EJEMPLO" VARCHAR2(100 BYTE)
+   );
+
+Insert into BD_FISCALIZACION.FC_ESTRUCTURA_DIRECCION (ID,ESTRUCTURA,EJEMPLO) values ('1','~ @ ~ @ @','CL 10 B 15 22');
+Insert into BD_FISCALIZACION.FC_ESTRUCTURA_DIRECCION (ID,ESTRUCTURA,EJEMPLO) values ('2','~ @ @ @','CL 10 15 22');
+Insert into BD_FISCALIZACION.FC_ESTRUCTURA_DIRECCION (ID,ESTRUCTURA,EJEMPLO) values ('3','~ @ @ ~ @','CL 10 15 B 22');
+Insert into BD_FISCALIZACION.FC_ESTRUCTURA_DIRECCION (ID,ESTRUCTURA,EJEMPLO) values ('4','~ @ ~ @ ~ @','CL 10 B 15 B 22');
+Insert into BD_FISCALIZACION.FC_ESTRUCTURA_DIRECCION (ID,ESTRUCTURA,EJEMPLO) values ('6','~ @ @@@@','CL 10 1522');
+Insert into BD_FISCALIZACION.FC_ESTRUCTURA_DIRECCION (ID,ESTRUCTURA,EJEMPLO) values ('5','~ @ ~ @@@@','CL 10 B 1522');
+--------------------------------------------------------
