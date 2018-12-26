@@ -1,0 +1,858 @@
+-- HEAD
+
+create or replace PACKAGE                                                                                 PGK_CONSULTAS_MASIVAS_TTO AS 
+
+
+Procedure Sp_Iniciar (as_Propietarios Simple_Integer,
+                      as_Vehiculos Simple_Integer,
+                      as_Novedades Simple_Integer,
+                      as_Historico_Traspaso Simple_Integer);
+
+
+END PGK_CONSULTAS_MASIVAS_TTO;
+
+
+
+-- BODY
+
+create or replace PACKAGE BODY                                                                                                                                                                                                                                                                                                                                                                                                                                                                   PGK_CONSULTAS_MASIVAS_TTO AS
+
+is_commit Simple_Integer:=0;
+is_parametro Simple_Integer:=0;
+Tp_Propietario Tp_Propietarios :=Tp_Propietarios();
+Tp_Lista_Propietario Tp_Lista_Propietarios :=Tp_Lista_Propietarios();
+is_Novedad_Matricula Simple_Integer:=9;
+is_Novedad_Radicacion Simple_Integer:=10;
+Tp_Lista_Error Tp_Lista_Errores:=Tp_Lista_Errores();
+Tp_Error Tp_Errores:=Tp_Errores();
+Tp_Vehiculo system.Tp_Vehiculos:=system.Tp_Vehiculos();
+Tp_lista_vehiculo system.Tp_lista_vehiculos:=system.Tp_lista_vehiculos();
+iv_placa VARCHAR2(20); 
+ltul_read UTL_FILE.FILE_TYPE; 
+TYPE tp_placa IS VARRAY(1500000) OF VARCHAR(10);
+Array_Placa tp_placa:=tp_placa();
+
+
+Procedure Sp_Cargar_Parametro As
+
+/*ISVA
+Nombre     :Sp_Cargar_Parametro
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Variables  :is_commit
+Retorno    :              
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Recupera placas para procesar
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+lv_placa Varchar2 (10 Byte):='';
+ln_contador Number:=1;
+
+
+Begin
+    ltul_read := UTL_FILE.FOPEN('DATA_LOAD','placas.csv','R');
+        Loop
+            Begin
+                UTL_FILE.GET_LINE(ltul_read,lv_placa); 
+                    Array_Placa.Extend;
+                    Array_Placa(Array_Placa.Count) := lv_placa;
+                EXCEPTION
+                WHEN No_Data_Found THEN EXIT; 
+            End;
+        End Loop;    
+        
+End Sp_Cargar_Parametro;
+
+Procedure Sp_Exception (av_Estado Varchar) As
+
+/*ISVA
+Nombre     :Sp_Exception
+Autor      :Blados.Ospina
+Fecha      :26/04/18
+Variables  :lv_Name_File_Error, v_Error 
+Retorno    :              
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :2.1
+Objetivo   :Capturar los errores y almacenarlos en archivo plano
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+226/04/2018  Blados.Ospina   1.0                     */
+
+lv_Name_File_Error Varchar2(255 byte):='Error_'||av_Estado||' '||To_Char(Sysdate,'dd-mm-yyyy hh24-mi-ss')||'.txt';
+v_Error UTL_FILE.FILE_TYPE;
+
+Begin
+    If Tp_Lista_Error.Count()>0 Then
+      v_Error:= UTL_FILE.FOPEN('DATA_TTO',lv_Name_File_Error,'W');
+            For Ln_Index In 1..Tp_Lista_Error.Count() Loop
+                UTL_FILE.PUT_LINE(v_Error,Tp_Lista_Error(Ln_Index).Nombre_Error||';'||Tp_Lista_Error(Ln_Index).Id_Error);
+            End Loop;
+       UTL_FILE.FCLOSE(v_Error);  
+    End If;
+End Sp_Exception;
+
+Procedure sp_historico_traspaso As
+
+/*ISVA
+Nombre     :sp_historico_traspaso
+Autor      :Blados.Ospina
+Fecha      :17/09/2018
+Variables  :lv_placas, lutl_read, lb_Existe
+Variables  :lb_Existe_encabezado, lutl_write
+Retorno    :              
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Consulta el historico de traspasos Transito
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+17/09/2018 Blados.Ospina   1.0                     */
+
+lv_placas VARCHAR2(10); 
+lutl_read UTL_FILE.FILE_TYPE; 
+
+lv_Name_File Varchar2(255 byte):='Historico_Traspasos Transito '||To_Char(Sysdate,'dd-mm-yyyy hh24-mi-ss')||'.txt';
+Cursor lcur_historico_traspaso(av_placa Varchar)  is Select Distinct Nro_Placa, id_usuario,tipo_documento_usuario,
+                                                                     id_comprador,tipo_documento_comprador,porcentaje,
+                                                                     REGEXP_REPLACE(fecha,'"','') As Fecha 
+                                                     From bd_transitos.st_historiales_traspaso
+                                                     where nro_placa = av_placa;
+
+lb_Existe_encabezado Boolean:=False;
+lb_Existe Boolean;
+lutl_write UTL_FILE.FILE_TYPE;  
+
+Begin
+    lutl_read := UTL_FILE.FOPEN('DATA_LOAD','placas.csv','R');
+    lutl_write := UTL_FILE.FOPEN('DATA_TTO',lv_Name_File,'W'); 
+    Loop
+            Begin
+         UTL_FILE.GET_LINE(lutl_read,lv_placas); 
+         lb_Existe:=False;
+            If lb_Existe_encabezado = False Then
+                  UTL_FILE.PUT_LINE(lutl_write,'NRO_PLACA;'||'ID_VENDEDOR;'||'TIPO_DOCUMENTO_VENDEDOR;'||'ID_COMPRADOR;'
+                                                           ||'TIPO_DOCUMENTO_COMPRADOR;'||'PORCENTAJE;'||'FECHA_TRAMITE');
+                        lb_Existe_encabezado:=True;
+            End If;
+            For ln_index In lcur_historico_traspaso(lv_placas) Loop
+                    UTL_FILE.PUT_LINE(lutl_write,
+                            Ln_Index.Nro_Placa||';'
+                            ||Ln_Index.id_usuario||';'
+                            ||Ln_Index.tipo_documento_usuario||';'
+                            ||Ln_Index.id_comprador||';'
+                            ||Ln_Index.tipo_documento_comprador||';'
+                            ||Ln_Index.porcentaje||';'
+                            ||Ln_Index.Fecha);
+                        lb_Existe:= True;  
+            End Loop;
+            If lb_Existe = False Then
+                UTL_FILE.PUT_LINE(lutl_write,lv_placas||';'||'No registra propietario');
+            End If;
+            
+            EXCEPTION 
+            WHEN No_Data_Found THEN EXIT;
+            WHEN OTHERS THEN
+             Tp_Error.Id_Error:=sqlerrm;
+             Tp_Error.Nombre_Error:=iv_placa||';'||Dbms_Utility.Format_Error_Backtrace;
+             Tp_Lista_Error.Extend;
+             Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+             Continue;
+        End;
+    End Loop;
+    
+    Sp_Exception('Historiales_Traspasos Tto');
+End sp_historico_traspaso;
+
+Procedure Sp_Consultar_Novedades_Tto AS
+
+/*ISVA
+Nombre     :Sp_Consultar_Novedades
+Autor      :Blados.Ospina
+Fecha      :26/04/18
+Variables  :lcur_placa, Lcur_Novedad, v_MyFileHandle
+Retorno    :              
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :2.1
+Objetivo   :Capturar los errrore y alamcenarlos en archivo plano
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+226/04/2018  Blados.Ospina   1.0             */
+
+lb_Existe Boolean:=False;
+lv_Name_File Varchar2(255 byte):='Novedades Tto '||To_Char(Sysdate,'dd-mm-yyyy hh24-mi-ss')||'.txt';
+v_MyFileHandle UTL_FILE.FILE_TYPE;
+
+Cursor Lcur_Novedad(av_nro_placa Varchar) Is Select Distinct 
+                                                    St.Nro_Placa as Placa,
+                                                    St.Nombre_Tramite As Tramite,
+                                                    To_Date(Decode(Length(St.Fecha_Tramite),7,'0'||St.Fecha_Tramite,St.Fecha_Tramite)) As Fecha,
+                                                    Fm.Municipio As Destino, 
+                                                    Fr.Municipio As Origen,
+                                                    St.Nombre_Servicio_Anterior As Servicio_Anterior,
+                                                    St.Nombre_Servicio_Nuevo As Servicion_nuevo,
+                                                    Sr.Municipio As Transito
+                                                from Bd_Transitos.St_Tramites St
+                                                Left Join Bd_Fiscalizacion.Fc_Municipio_Departamento fm On Fm.Divipo = Id_Secretaria_Destino
+                                                Left Join Bd_Fiscalizacion.Fc_Municipio_Departamento fr On Fr.Divipo = Id_Secretaria_Origen
+                                                Inner Join Bd_Transitos.St_Maestro Sm On Sm.Id_Radicado = St.Id_Radicado
+                                                Inner Join Bd_Fiscalizacion.Fc_Municipio_Departamento Sr On Sr.Divipo = Sm.Id_Secretaria
+                                                Where St.Id_tramite In (1,5,6,9,10,13,15,20,65)
+                                                    And St.Nro_Placa = av_nro_placa
+                                                Order by 3 Desc;
+
+
+  BEGIN
+     ltul_read := UTL_FILE.FOPEN('DATA_LOAD','placas.csv','R');	
+     v_MyFileHandle := UTL_FILE.FOPEN('DATA_TTO',lv_Name_File,'W');  
+       Loop
+        Begin
+            UTL_FILE.GET_LINE(ltul_read,iv_placa); 
+            For Ln_Index_2 In Lcur_Novedad(iv_placa) Loop
+                Begin
+                    If lb_Existe = False Then
+                        UTL_FILE.PUT_LINE(v_MyFileHandle,'PLACA'||';'||'TRAMITE'||';'||'FECHA_TRAMITE'||';'||
+                                                         'SECRETARIA_DESTINO'||';'||'SECRETARIA_ORIGEN'||';'||
+                                                         'SERVICIO_ANTERIOR'||';'||'SERVICIO_NUEVO'||';'||'TRANSITO');
+                        lb_Existe:=True;
+                    End If;
+                        UTL_FILE.PUT_LINE(v_MyFileHandle,
+                        Ln_Index_2.Placa||';'
+                        ||Ln_Index_2.Tramite||';'
+                        ||Ln_Index_2.Fecha||';'
+                        ||Ln_Index_2.Destino||';'
+                        ||Ln_Index_2.Origen||';'
+                        ||Ln_Index_2.Servicio_Anterior||';'    
+                        ||Ln_Index_2.Servicion_nuevo||';'    
+                        ||Ln_Index_2.Transito);
+                            
+                     Exception
+                        When Others Then         
+                            tp_Error.Id_Error:=sqlerrm;
+                            tp_Error.Nombre_Error:=ln_index_2.Placa||';'||Dbms_Utility.Format_Error_Backtrace;
+                            Tp_Lista_Error.Extend;
+                            Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+                            Continue;
+                End;
+            End Loop;
+                   Exception
+                       WHEN No_Data_Found THEN EXIT; 
+                       WHEN OTHERS THEN
+                           Tp_Error.Id_Error:=sqlerrm;
+                           Tp_Error.Nombre_Error:=iv_placa||';'||Dbms_Utility.Format_Error_Backtrace;
+                           Tp_Lista_Error.Extend;
+                           Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+                           Continue;
+              End;
+       End Loop;
+        UTL_FILE.FCLOSE(ltul_read);
+        UTL_FILE.FCLOSE(v_MyFileHandle);  
+        
+        Sp_Exception('Novedades Tto');
+END Sp_Consultar_Novedades_Tto;
+
+Procedure Sp_Reset_Tp_Vehiculos As
+
+/*ISVA
+Nombre     :Sp_Reset_Tp_Vehiculos
+Autor      :Blados.Ospina
+Fecha      :11/09/2018
+Parametros :
+Variables  :
+Retorno    :        
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :restablece los datos por defecto
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/09/2018  Blados.Ospina    1.0                     */
+Begin
+      Tp_vehiculo.nro_placa := '';
+      Tp_vehiculo.nombre_marca := '';
+      Tp_vehiculo.nombre_linea := '';
+      Tp_vehiculo.modelo := '';
+      Tp_vehiculo.nombre_clase := '';
+      Tp_vehiculo.nombre_servicio := '';
+      Tp_vehiculo.nombre_carroceria := '';
+      Tp_vehiculo.nro_puertas := '';
+      Tp_vehiculo.potencia := '';
+      Tp_vehiculo.id_secretaria :='';
+      Tp_vehiculo.nombre_secretaria := '';
+      Tp_vehiculo.cilindraje := '';
+      Tp_vehiculo.cap_pasajeros := '';
+      Tp_vehiculo.cap_toneladas := '';
+      Tp_vehiculo.valor_factura := '';
+      Tp_vehiculo.blindado := '';
+      Tp_vehiculo.nombre_estado := '';
+      Tp_vehiculo.clasico_antiguo := '';
+      Tp_vehiculo.fecha_matriculo := '';
+      Tp_vehiculo.caja := '';
+      Tp_vehiculo.traccion := '';
+      Tp_vehiculo.combustion := '';
+ENd;
+
+FUNCTION ft_transito (an_id_radicado NUMBER) RETURN VARCHAR AS
+
+lv_transito VARCHAR2 (255 BYTE):='';
+
+BEGIN
+    SELECT Distinct fc.municipio INTO lv_transito FROM bd_transitos.st_maestro st
+    INNER JOIN bd_fiscalizacion.fc_municipio_departamento fc ON st.id_secretaria = fc.divipo
+    WHERE id_radicado = an_id_radicado And Rownum = 1;
+        RETURN lv_transito;
+        
+EXCEPTION 
+WHEN OTHERS THEN
+   RETURN lv_transito;  
+END ft_transito;
+
+Procedure Sp_Datos_Vehiculos (av_placa Varchar, an_id_radicado Number)  As 
+
+/*ISVA
+Nombre     :Sp_Datos_Vehiculos
+Autor      :Blados.Ospina
+Fecha      :11/09/2018
+Parametros :av_placa, an_id_radicado
+Variables  :lcur_Vehiculos
+Retorno    :        
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Almacena las caracteristicas consultadas
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/09/2018  Blados.Ospina    1.0                     */
+
+Cursor lcur_Vehiculos Is Select nro_placa,nombre_marca,nombre_linea,modelo,nombre_clase,nombre_servicio,nombre_carroceria,
+                                nro_puertas,potencia,id_secretaria,nombre_secretaria,cilindraje,cap_pasajeros,cap_toneladas,
+                                valor_factura,blindado,nombre_estado,clasico_antiguo,fecha_matriculo,caja,traccion,combustion
+                         From bd_transitos.st_vehiculos
+                         Where Nro_placa = av_placa And id_radicado = an_id_radicado
+                         Order By nro_placa,nombre_marca,nombre_linea ,modelo,nombre_clase,nombre_servicio,nombre_carroceria,
+                                nro_puertas,potencia,id_secretaria,nombre_secretaria,cilindraje,cap_pasajeros,cap_toneladas,
+                                valor_factura,blindado,nombre_estado,clasico_antiguo,fecha_matriculo,caja,traccion,combustion;
+
+
+Begin
+    For ln_index In lcur_Vehiculos Loop
+        Begin
+            Tp_vehiculo.nro_placa := ln_index.nro_placa;
+            Tp_vehiculo.nombre_marca := ln_index.nombre_marca;
+            Tp_vehiculo.nombre_linea := ln_index.nombre_linea;
+            Tp_vehiculo.modelo := ln_index.modelo;
+            Tp_vehiculo.nombre_clase := ln_index.nombre_clase;
+            Tp_vehiculo.nombre_servicio := ln_index.nombre_servicio;
+            Tp_vehiculo.nombre_carroceria := ln_index.nombre_carroceria;
+            Tp_vehiculo.nro_puertas := ln_index.nro_puertas;
+            Tp_vehiculo.potencia := ln_index.potencia;
+            Tp_vehiculo.id_secretaria := ln_index.id_secretaria;
+            Tp_vehiculo.nombre_secretaria := ln_index.nombre_secretaria;
+            Tp_vehiculo.cilindraje := ln_index.cilindraje;
+            Tp_vehiculo.cap_pasajeros := ln_index.cap_pasajeros;
+            Tp_vehiculo.cap_toneladas := ln_index.cap_toneladas;
+            Tp_vehiculo.valor_factura := ln_index.valor_factura;
+            Tp_vehiculo.blindado := ln_index.blindado;
+            Tp_vehiculo.nombre_estado := ln_index.nombre_estado;
+            Tp_vehiculo.clasico_antiguo := ln_index.clasico_antiguo;
+            Tp_vehiculo.fecha_matriculo := ln_index.fecha_matriculo;
+            Tp_vehiculo.caja := ln_index.caja;
+            Tp_vehiculo.traccion := ln_index.traccion;
+            Tp_vehiculo.combustion := ln_index.combustion;
+            Tp_vehiculo.transito :=ft_transito(an_id_radicado);
+                 EXCEPTION
+                 WHEN OTHERS THEN
+                 Tp_Error.Id_Error:='Error_Placa'||';';
+                 Tp_Error.Nombre_Error:=ln_index.nro_placa;
+                 Tp_Lista_Error.Extend;
+                 Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+        End;
+    End Loop;
+End Sp_Datos_Vehiculos;
+
+Procedure sp_Registrar_caracteristicas As
+
+/*ISVA
+Nombre     :sp_Registrar_caracteristicas
+Autor      :Blados.Ospina
+Fecha      :11/09/2018
+Parametros :
+Variables  :lv_Name_File, lb_encabezado, lutl_write
+Retorno    :        
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Genera el archivo plano con las caracteristicas
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/09/2018  Blados.Ospina    1.0                     */
+
+lv_Name_File Varchar2(255 byte):='Vehiculos Tto '||To_Char(Sysdate,'dd-mm-yyyy hh24-mi-ss')||'.txt';
+lb_encabezado Boolean:=False;
+lutl_write UTL_FILE.FILE_TYPE;
+
+Begin
+    If Tp_Lista_Vehiculo.Count()>0 Then 
+        lutl_write := UTL_FILE.FOPEN('DATA_TTO',lv_Name_File,'W'); 
+        For ln_index In 1..Tp_Lista_Vehiculo.Count() Loop
+            Begin
+            
+                 If  Tp_lista_vehiculo(Ln_Index).nro_placa is not null Then
+                    If lb_encabezado = False Then
+                         UTL_FILE.PUT_LINE(lutl_write,'NRO_PLACA;'||'NOMBRE_MARCA;'||'NOMBRE_LINEA;'||'MODELO;'||'NOMBRE_CLASE;'
+                                ||'NOMBRE_SERVICIO;'||'NOMBRE_CARROCERIA;'||'NRO_PUERTAS;'||'POTENCIA;'||'ID_SECRETARIA;'||'NOMBRE_SECRETARIA;'
+                                ||'CILINDRAJE;'||'CAP_PASAJEROS;'||'CAP_TONELADAS;'||'VALOR_FACTURA;'||'BLINDADO;'||'NOMBRE_ESTADO;'
+                                ||'CLASICO_ANTIGUO;'||'FECHA_MATRICULO;'||'CAJA;'||'TRACCION;'||'COMBUSTION;'||'TRANSITO');
+                         lb_encabezado:=True;
+                    End If;
+                    UTL_FILE.PUT_LINE(lutl_write,Tp_lista_vehiculo(Ln_Index).nro_placa||';'||Tp_lista_vehiculo(Ln_Index).nombre_marca||';'
+                    ||Tp_lista_vehiculo(Ln_Index).nombre_linea||';'||Tp_lista_vehiculo(Ln_Index).modelo||';'||Tp_lista_vehiculo(Ln_Index).nombre_clase||';'
+                    ||Tp_lista_vehiculo(Ln_Index).nombre_servicio||';'||Tp_lista_vehiculo(Ln_Index).nombre_carroceria||';'
+                    ||Tp_lista_vehiculo(Ln_Index).nro_puertas||';'||Tp_lista_vehiculo(Ln_Index).potencia||';'
+                    ||Tp_lista_vehiculo(Ln_Index).id_secretaria||';'||Tp_lista_vehiculo(Ln_Index).nombre_secretaria||';'
+                    ||Tp_lista_vehiculo(Ln_Index).cilindraje||';'||Tp_lista_vehiculo(Ln_Index).cap_pasajeros||';'||Tp_lista_vehiculo(Ln_Index).cap_toneladas||';'
+                    ||Tp_lista_vehiculo(Ln_Index).valor_factura||';'||Tp_lista_vehiculo(Ln_Index).blindado||';'||Tp_lista_vehiculo(Ln_Index).nombre_estado||';'
+                    ||Tp_lista_vehiculo(Ln_Index).clasico_antiguo||';'||Tp_lista_vehiculo(Ln_Index).fecha_matriculo||';'||Tp_lista_vehiculo(Ln_Index).caja||';'
+                    ||Tp_lista_vehiculo(Ln_Index).traccion||';'||Tp_lista_vehiculo(Ln_Index).combustion||';'||Tp_lista_vehiculo(Ln_Index).transito);   
+                End If;
+                Exception
+                When Others Then
+                    Tp_Error.Id_Error:='Error_Placa'||';';
+                    Tp_Error.Nombre_Error:=Tp_lista_vehiculo(Ln_Index).nro_placa;
+                    Tp_Lista_Error.Extend;
+                    Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+            End;
+        End Loop;
+      UTL_FILE.FCLOSE(lutl_write);  
+    End If;
+    
+        Sp_Exception('Vehiculos Tto');
+End sp_Registrar_caracteristicas;
+
+Procedure Sp_Consult_Caracteristicas_Tto AS
+
+/*ISVA
+Nombre     :Sp_Caracteristicas
+Autor      :Blados.Ospina
+Fecha      :26/04/18
+Variables  :lt_Error_Nov, lv_Name_File, v_MyFileHandle
+           :lcur_placa, lcur_vehiculos, lb_Existe, lb_Abrir
+           :ld_fecha, ls_id_radicado
+Retorno    :              
+Proyecto   :QAS
+VersiÛn    :2.1
+Objetivo   :Trae las caracteristicas de vehiculos
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+226/04/2018  Blados.Ospina   1.0                     */
+                   
+lb_Existe Boolean:=False;
+lb_Abrir Boolean:=False;
+ld_fecha Date;
+ls_id_radicado Number:=0;
+--lv_placa Varchar2 (10 Byte):='';
+
+Begin
+        For ln_index In 1..Array_Placa.Count() Loop
+            Begin
+           Sp_Reset_Tp_Vehiculos;
+            ls_id_radicado:=0;
+                ld_fecha:= Substr(system.Pkg_utilitario.ft_Fecha_Maxima(Array_Placa(ln_index)),1,10);
+                    If ld_fecha is not null Then
+                        ls_id_radicado:= system.Pkg_utilitario.ft_Max_Rad_Vehiculos(Array_Placa(ln_index),(ld_fecha));
+                            ls_id_radicado:=system.pkg_utilitario.ft_homologar_radicado (Array_Placa(ln_index),ls_id_radicado);
+                                If  ls_id_radicado is not null And ls_id_radicado > 0 Then
+                                    Sp_Datos_Vehiculos(Array_Placa(ln_index),ls_id_radicado);
+                                Else
+                                    Tp_vehiculo.Nro_placa:=Array_Placa(ln_index);
+                                    Tp_vehiculo.Nombre_marca:='No hay Informacion';  
+                                End If;
+                    Else
+                        lb_Existe:= system.Pkg_utilitario.ft_Existe_Registro_Vehiculo(av_placa => Array_Placa(ln_index));
+                            If lb_Existe = True Then
+                               ls_id_radicado:=system.pkg_utilitario.ft_Max_Rad_Vehiculos(av_placa => Array_Placa(ln_index));
+                               Sp_Datos_Vehiculos(Array_Placa(ln_index),ls_id_radicado);
+                            Else
+                                Tp_vehiculo.Nro_placa:=Array_Placa(ln_index);
+                                Tp_vehiculo.Nombre_marca:='No hay Informacion';
+                            End If;
+                    End If;
+         Exception
+         WHEN No_Data_Found THEN EXIT; 
+         WHEN OTHERS THEN
+             Tp_Error.Id_Error:='Error_Placa'||';';
+             Tp_Error.Nombre_Error:=Array_Placa(ln_index);
+             Tp_Lista_Error.Extend;
+             Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+    End;
+    
+     Tp_Lista_Vehiculo.Extend;
+     Tp_Lista_Vehiculo(Tp_Lista_Vehiculo.Count()):=Tp_Vehiculo;
+    End Loop;
+        UTL_FILE.FCLOSE(ltul_read);
+    sp_Registrar_caracteristicas;     
+    
+End Sp_Consult_Caracteristicas_Tto;
+
+Function Ft_Historiales_Traspaso (av_placa Varchar) Return Boolean As
+
+/*ISVA
+Nombre     :Ft_Historiales_Traspaso
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Parametros :av_placa
+Variables  :lb_Existe, lcur_histo_traspaso
+Retorno    :lb_Existe             
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Recupera los parametros para la cantidad de commit
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+lb_Existe Boolean:=False;
+
+Cursor lcur_histo_traspaso Is Select Distinct Sh.Nro_Placa,Sh.Tipo_Documento_Usuario As Documento_Vendedor, 
+                                              Sh.Id_Usuario As Vendedor,Sh.Tipo_Documento_Comprador As Documento_Comprador, 
+                                              Sh.Id_Comprador As Comprador, Sh.Porcentaje As Porcentaje,Sh.Fecha As Fecha_Tramite, 
+                                              Sh.Id_Radicado As Transito,Sp.Id_Documento As Documento_Propietario, Sp.Id_Usuario As Propietario
+                                    From Bd_Transitos.St_Historiales_Traspaso Sh
+                                    Inner Join Bd_Transitos.St_Propietarios Sp On Sp.Nro_Placa = Sh.Nro_Placa 
+                                                                               And Sp.Id_Usuario =  Sh.Id_Comprador
+                                    Where Sh.Nro_Placa = av_placa;
+Begin 
+  If System.Pkg_Utilitario.Ft_Existe_His_Traspaso(av_placa) = True Then
+    For Ln_Index In lcur_histo_traspaso Loop
+        Begin  
+        Tp_Propietario.Nro_Placa:= Ln_Index.Nro_placa;
+        Tp_Propietario.Tipo_Documento_Vendedor:= Ln_Index.Documento_Vendedor;
+        Tp_Propietario.Id_Vendedor:=Ln_Index.Vendedor;
+        Tp_Propietario.Tipo_Documento_Comprador:= Ln_Index.Documento_Comprador;
+        Tp_Propietario.Id_Comprador:= Ln_Index.Comprador;
+        Tp_Propietario.Porcentaje:= Ln_Index.Porcentaje;
+        Tp_Propietario.Fecha:= Ln_Index.Fecha_Tramite;
+        Tp_Propietario.Transito:= System.Pkg_Utilitario.Ft_Registrar_Transito(Ln_Index.Transito);
+        Tp_Propietario.Id_Documento_Propietario:= Ln_Index.Documento_Propietario;
+        Tp_Propietario.Id_Propieario:= Ln_Index.Propietario;
+        Tp_Propietario.Estado := 'Traspaso';
+        
+             Tp_Lista_Propietario.Extend;
+             Tp_Lista_Propietario(Tp_Lista_Propietario.Count()):=Tp_Propietario;
+            Exception 
+                When Others Then
+                    Tp_Error.Id_Error:=sqlerrm;
+                    Tp_Error.Nombre_Error:=ln_index.Nro_Placa||';'||Dbms_Utility.Format_Error_Backtrace;
+                    Tp_Lista_Error.Extend;
+                    Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+                    Continue;
+        End;
+        lb_Existe:=True;
+    End Loop; 
+  End If;  
+    
+        Return lb_Existe;
+
+End Ft_Historiales_Traspaso;
+
+Function Ft_Radica_Matricul_Ini (av_placa Varchar,as_id_novedad Simple_Integer) Return Boolean As
+
+/*ISVA
+Nombre     :Ft_Radica_Matricul_Ini
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Parametros :av_placa
+Variables  :lb_Existe, lcur_histo_traspaso
+Retorno    :lb_Existe             
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Recupera los parametros para la cantidad de commit
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+lb_Existe Boolean:=False;
+
+Cursor lcur_radi_Maricula(ad_fecha Date) Is Select Distinct St.Nro_Placa,Sp.Porcentaje_Prop As Porcentaje, 
+                          To_Date(Case 
+                               When Length(St.Fecha_Tramite) = 8 Then
+                                    St.Fecha_Tramite
+                               When Length(St.Fecha_Tramite) > 8 Then
+                                  Substr(St.Fecha_Tramite,1,8)
+                                When Length(St.Fecha_Tramite) = 7 Then
+                                  '0'||St.Fecha_Tramite
+                              Else Null End) As Fecha_Tramite,
+                                  --St.Id_Radicado As Transito_Tramite, 
+                                  fmd.municipio As Transito, 
+                                  Sp.Id_Documento As Documento, Sp.Id_Usuario As Usuario
+                          From Bd_Transitos.St_Tramites St
+                          Inner Join Bd_Transitos.St_Propietarios Sp On Sp.Nro_Placa = St.Nro_Placa
+                          Inner Join Bd_Transitos.St_Maestro St1 On St1.id_radicado = St.Id_Radicado
+                          Inner Join Bd_Transitos.St_Maestro St2 On St2.id_radicado =  Sp.Id_Radicado
+                          Inner Join Bd_fiscalizacion.fc_municipio_departamento fmd On fmd.divipo = st1.id_secretaria 
+                          Where St.Nro_Placa = av_placa  And Id_Tramite = as_id_novedad And st1.id_secretaria = st2.id_secretaria
+                          And 
+                          To_Date(Decode(Length(St.Fecha_Tramite),7,'0'||St.Fecha_Tramite,St.Fecha_Tramite)) = ad_fecha;
+Begin
+   
+        If System.Pkg_Utilitario.ft_Existe_Registro (av_placa,as_id_novedad) = True Then
+                    
+                For Ln_Index In lcur_radi_Maricula(System.Pkg_Utilitario.ft_Fecha_Maxima (av_Placa,as_id_novedad )) Loop
+                     Tp_Propietario.Nro_Placa:= Ln_Index.Nro_placa;
+                     Tp_Propietario.Porcentaje:= Ln_Index.Porcentaje;
+                     Tp_Propietario.fecha := Ln_Index.Fecha_Tramite;
+                     Tp_Propietario.Transito := Ln_Index.Transito;
+                     Tp_Propietario.Id_Documento_Propietario := Ln_Index.documento;
+                     Tp_Propietario.Id_Propieario := Ln_Index.usuario;
+                     If  as_id_novedad = 10 Then
+                        Tp_Propietario.Estado := 'Radicacion';
+                     Else
+                        Tp_Propietario.Estado := 'Matricula Inicial';
+                     End If;
+                     
+                     Tp_Lista_Propietario.Extend;
+                     Tp_Lista_Propietario(Tp_Lista_Propietario.Count()):=Tp_Propietario;
+                     
+                    lb_Existe:= True;
+                End Loop;
+        End If;
+        
+     Return lb_Existe;
+     
+End Ft_Radica_Matricul_Ini;
+
+Procedure sp_reset_tp_propietario As
+
+/*ISVA
+Nombre     :Ft_Radica_Matricul_Ini
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Parametros :av_placa
+Variables  :lb_Existe, lcur_histo_traspaso
+Retorno    :lb_Existe             
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Recupera los parametros para la cantidad de commit
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+Begin
+        Tp_Propietario.Nro_Placa:='';
+        Tp_Propietario.Tipo_Documento_Vendedor:='';
+        Tp_Propietario.Id_Vendedor:='';
+        Tp_Propietario.Tipo_Documento_Comprador:='';
+        Tp_Propietario.Id_Comprador:='';
+        Tp_Propietario.Porcentaje:='';
+        Tp_Propietario.Fecha:='';
+        Tp_Propietario.Transito:='';
+        Tp_Propietario.Id_Documento_Propietario:='';
+        Tp_Propietario.Id_Propieario:='';
+        Tp_Propietario.estado:='';
+
+End sp_reset_tp_propietario;
+
+Function ft_solo_propietario (av_nro_placa Varchar) Return Boolean As
+
+/*ISVA
+Nombre     :ft_solo_propietario
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Parametros :av_nro_placa
+Variables  :lb_Existe, lcur_prop
+Retorno    :lb_Existe             
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Recupera los parametros para la cantidad de commit
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+lb_Existe Boolean:=False;
+
+Cursor lcur_prop Is Select Distinct sp.Nro_Placa As Nro_Placa, sp.Id_Documento As documento, sp.Id_Usuario As  Usuario,
+                                    sp.porcentaje_prop As Porcentaje, fmd.municipio As Transito 
+                    From bd_transitos.st_propietarios sp
+                    Inner join bd_transitos.st_maestro sm On sm.id_radicado = sp.id_radicado
+                    Inner Join bd_fiscalizacion.fc_municipio_departamento fmd On fmd.divipo = sm.id_secretaria
+                    Where sp.nro_placa = av_nro_placa;
+
+
+Begin
+    For ln_index In lcur_prop Loop
+          Tp_Propietario.Nro_Placa:= Ln_Index.Nro_placa;
+          Tp_Propietario.Id_Documento_Propietario := Ln_Index.documento;
+          Tp_Propietario.Id_Propieario := Ln_Index.usuario; 
+          Tp_Propietario.Porcentaje:= Ln_Index.Porcentaje;
+          Tp_Propietario.Transito := Ln_Index.Transito;
+          Tp_Propietario.Estado := 'Propietarios, no registra tramite';
+          
+           Tp_Lista_Propietario.Extend;
+           Tp_Lista_Propietario(Tp_Lista_Propietario.Count()):=Tp_Propietario;
+          
+          lb_Existe:= True;
+    End Loop;
+  
+    
+    Return lb_Existe;
+    
+End ft_solo_propietario;
+
+Procedure Sp_Consultar_Propietarios_Tto As
+
+/*ISVA
+Nombre     :Sp_Consultar_Propietarios_Tto
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Parametros :av_nro_placa
+Variables  :lv_Name_File, v_prop, lcur_placas
+Variables  :lb_Ingresado, lv_Resultado, tp_Placa
+Variables  :lb_Existe
+Retorno    :lb_Existe             
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :Recupera los parametros para la cantidad de commit
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+lv_Name_File Varchar2(255 byte):='Propietarios Tto'||' '||To_Char(Sysdate,'dd-mm-yyyy hh24-mi-ss')||'.txt';
+v_prop UTL_FILE.FILE_TYPE;
+
+
+lb_Ingresado Boolean;
+lv_Resultado Varchar(1 byte);
+
+lb_Existe Boolean:=False;
+
+Begin
+  ltul_read := UTL_FILE.FOPEN('DATA_LOAD','placas.csv','R');	
+    Loop
+       Begin
+        UTL_FILE.GET_LINE(ltul_read,iv_placa); 
+        lb_Ingresado := False;
+        sp_reset_tp_propietario;
+                        
+                        --Valido si tiene traspaso
+                        lb_Ingresado := Ft_Historiales_Traspaso(iv_placa);
+                        
+                        --Radicacion
+                        If lb_Ingresado = False then
+                               lb_Ingresado :=Ft_Radica_Matricul_Ini(iv_placa,is_Novedad_Radicacion);
+                        End If;
+                        
+                        --Matricula Inicial
+                        If lb_Ingresado = False then
+                               lb_Ingresado :=Ft_Radica_Matricul_Ini(iv_placa,is_Novedad_Matricula);
+                        End If;
+                        
+                        --Solo Propietario
+                        If lb_Ingresado = False then
+                               lb_Ingresado:= ft_solo_propietario(iv_placa);
+                        End If;
+                        
+                        If lb_Ingresado = False then
+                              Tp_Propietario.Nro_Placa:= iv_placa;
+                              Tp_Propietario.Estado := 'No hay informacion';
+          
+                              Tp_Lista_Propietario.Extend;
+                              Tp_Lista_Propietario(Tp_Lista_Propietario.Count()):=Tp_Propietario;
+                        End If; 
+              EXCEPTION
+              WHEN No_Data_Found THEN EXIT; 
+              WHEN OTHERS THEN
+                  Tp_Error.Id_Error:='Error_Placa'||';';
+                  Tp_Error.Nombre_Error:=iv_placa;
+                  Tp_Lista_Error.Extend;
+                  Tp_Lista_Error(Tp_Lista_Error.Count()):=Tp_Error;
+        End;
+    End Loop;
+          UTL_FILE.FCLOSE(ltul_read); 
+        
+    If Tp_Lista_Propietario.Count()>0 Then
+      v_prop:= UTL_FILE.FOPEN('DATA_TTO',lv_Name_File,'W');
+            For Ln_Index In 1..Tp_Lista_Propietario.Count() Loop
+                    If lb_Existe = False Then
+                        UTL_FILE.PUT_LINE(v_prop,'NRO_PLACA;'||'TIPO_DOCUMENTO_VENDEDOR;'||'ID_VENDECOR;'||
+                                                         'TIPO_DOCUMENTO_COMPRADOR;'||'ID_COMPRADOR;'||'PORCENTAJE;'||'FECHA;'||
+                                                         'TRANSITO;'||'ID_DOCUMENTO_PROPIETARIO;'||'ID_PROPIETARIOS;'||'ESTADO');
+                        lb_Existe:=True;
+                    End If;
+                        UTL_FILE.PUT_LINE(v_prop,Tp_Lista_Propietario(Ln_Index).Nro_placa||';'
+                        ||Tp_Lista_Propietario(Ln_Index).Tipo_Documento_Vendedor||';'||Tp_Lista_Propietario(Ln_Index).Id_Vendedor||';'
+                        ||Tp_Lista_Propietario(Ln_Index).Tipo_Documento_Comprador||';'||Tp_Lista_Propietario(Ln_Index).Id_Comprador||';'
+                        ||Tp_Lista_Propietario(Ln_Index).Porcentaje||';'||Tp_Lista_Propietario(Ln_Index).Fecha||';'
+                        ||Tp_Lista_Propietario(Ln_Index).Transito||';'||Tp_Lista_Propietario(Ln_Index).Id_Documento_Propietario||';'
+                        ||Tp_Lista_Propietario(ln_index).Id_Propieario||';'||Tp_Lista_Propietario(ln_index).estado);
+                          
+            End Loop;
+           UTL_FILE.FCLOSE(v_prop); 
+         
+    End If;
+    Sp_Exception('Propietarios Tto');
+    
+End Sp_Consultar_Propietarios_Tto;
+
+Procedure Sp_Iniciar (as_Propietarios Simple_Integer,
+                      as_Vehiculos Simple_Integer,
+                      as_Novedades Simple_Integer,
+                      as_Historico_Traspaso Simple_Integer) As
+
+/*ISVA
+Nombre     :Sp_Consultar_Propietarios_Tto
+Autor      :Blados.Ospina
+Fecha      :11/05/18
+Parametros :as_Propietarios, as_Vehiculos, as_Novedades
+Variables  :
+Retorno    :            
+Proyecto   :PGK_CONSULTAS_MASIVAS_TTO
+VersiÛn    :1.0
+Objetivo   :El encargado de iniciar y unir los procesos
+**************************************************************************
+control de cambios realizados por desarrolladores
+**************************************************************************
+Fecha       Autor            Version  Modificacion   
+11/05/2018  Blados.Ospina   1.0                     */
+
+Begin
+    sp_cargar_parametro;
+        
+    If  as_Novedades = 1 Then
+        Sp_Consultar_Novedades_Tto;
+    End If;
+    If as_Propietarios = 1 Then
+        Sp_Consultar_Propietarios_Tto;
+    End If;
+    If as_Vehiculos = 1 Then
+        Sp_Consult_Caracteristicas_Tto;
+    End If; 
+    If as_Historico_Traspaso = 1 Then
+        sp_historico_traspaso;
+    End If; 
+    
+End Sp_Iniciar;
+
+END PGK_CONSULTAS_MASIVAS_TTO;
